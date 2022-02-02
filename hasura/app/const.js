@@ -1,9 +1,9 @@
 module.exports = {
   projectName: "JungleLab",
   urls: {
-    protocol: "https://junglelab.io",
+    protocol: "https://jungle.coinos.io",
   },
   emails: {
-    support: "support@junglelab.io",
+    support: "support@jungle.coinos.io",
   },
 };
