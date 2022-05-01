@@ -1,20 +1,32 @@
+<script context="module">
+  export async function load({ session }) {
+    if (!(session && session.user && session.user.is_admin))
+      return {
+        status: 302,
+        redirect: "/",
+      };
+
+    return {};
+  }
+</script>
+
 <script>
+  import { session } from "$app/stores";
   import { onMount, tick, onDestroy } from "svelte";
   import { page } from "$app/stores";
   import { ArtworkMedia } from "$comp";
-  import { getSamples, updateUser } from "$queries/users";
-  import { role, user, token } from "$lib/store";
+  import { getSamples, updateUser, deleteSamples } from "$queries/users";
   import { api, hasura, query } from "$lib/api";
-  import { err, goto, info } from "$lib/utils";
+  import { err, info } from "$lib/utils";
   import { requireLogin } from "$lib/auth";
 
   let users = [];
   let samples;
 
   onMount(async () => {
-    if ($token) {
+    if ($session.jwt) {
       const applicantsRequest = await hasura
-        .auth(`Bearer ${$token}`)
+        .auth(`Bearer ${$session.jwt}`)
         .headers({
           "X-Hasura-Role": "approver",
         })
@@ -28,62 +40,69 @@
     }
   });
 
-  $: pageChange($page, $user);
-
-  let pageChange = async () => {
+  let makeArtist = async (user) => {
     try {
-      if (!$user) return;
-      if (!$user.is_admin) goto("/market");
-      $role = "approver";
+      user.is_artist = true;
+      await query(
+        updateUser,
+        { id: user.id, user: { is_artist: true, info: null } },
+        {
+          "X-Hasura-Role": "approver",
+        }
+      ).catch(err);
+
+      await query(
+        deleteSamples,
+        { user_id: user.id },
+        {
+          "X-Hasura-Role": "approver",
+        }
+      ).catch(err);
+
+      await api
+        .url("/mail-artist-application-approved")
+        .auth(`Bearer ${$session.jwt}`)
+        .post({
+          userId: user.id,
+        });
+
+      users = users.filter((u) => u.id !== user.id);
+      info(`${user.username} is now an artist!`);
     } catch (error) {
       err(error);
     }
-    await requireLogin();
-  };
-
-  onDestroy(() => ($role = "user"));
-
-  let makeArtist = async (user) => {
-    user.is_artist = true;
-    query(
-      updateUser,
-      { id: user.id, user: { is_artist: true } },
-      {
-        "X-Hasura-Role": "approver",
-      }
-    ).catch(err);
-
-    await api
-      .url("/mail-artist-application-approved")
-      .auth(`Bearer ${$token}`)
-      .post({
-        userId: user.id,
-      });
-
-    users = users.filter((u) => u.id !== user.id);
-    info(`${user.username} is now an artist!`);
   };
 
   let denyArtist = async (user) => {
-    user.is_denied = true;
-    query(
-      updateUser,
-      { id: user.id, user: { is_denied: true } },
-      {
-        "X-Hasura-Role": "approver",
-      }
-    ).catch(err);
+    try {
+      await query(
+        updateUser,
+        { id: user.id, user: { info: null } },
+        {
+          "X-Hasura-Role": "approver",
+        }
+      ).catch(err);
 
-    await api
-      .auth(`Bearer ${$token}`)
-      .url("/mail-artist-application-denied")
-      .post({
-        userId: user.id,
-      })
-      .json();
+      await query(
+        deleteSamples,
+        { user_id: user.id },
+        {
+          "X-Hasura-Role": "approver",
+        }
+      ).catch(err);
 
-    users = users.filter((u) => u.id !== user.id);
-    info(`${user.username} has been denied!`);
+      await api
+        .auth(`Bearer ${$session.jwt}`)
+        .url("/mail-artist-application-denied")
+        .post({
+          userId: user.id,
+        });
+
+      users = users.filter((u) => u.id !== user.id);
+      info(`${user.username} has been denied!`);
+    } catch (error) {
+      err(error);
+    }
   };
 </script>
 
@@ -94,6 +113,10 @@
       <div class="flex-grow mb-auto mr-2 mt-2">
         <div class="mb-2">
           <h4><span class="font-bold">Username: </span>{user.username}</h4>
+        </div>
+
+        <div class="mb-2">
+          <h4><span class="font-bold">Email: </span>{user.display_name}</h4>
         </div>
 
         <div class="mb-2">
@@ -123,6 +146,6 @@
         >
       </div>
     </div>
-    <hr>
+    <hr />
   {/each}
 </div>

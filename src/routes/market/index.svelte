@@ -13,6 +13,7 @@
 </script>
 
 <script>
+  import { session } from "$app/stores";
   import { ProgressLinear } from "$comp";
   import Fa from "svelte-fa";
   import { faSlidersH } from "@fortawesome/free-solid-svg-icons";
@@ -23,8 +24,6 @@
     results,
     show,
     sortCriteria as sc,
-    token,
-    user,
   } from "$lib/store";
   import { info, err, goto } from "$lib/utils";
   import { Gallery, Results, Search } from "$comp";
@@ -59,6 +58,8 @@
       if ($fc.openBid) where.bid_id = { _is_null: false };
       if ($fc.ownedByCreator) where.artist_owned = { _eq: true };
       if ($fc.hasSold) where.transferred_at = { _is_null: false };
+      if ($fc.isPhysical) where.is_physical = { _eq: true };
+      if ($fc.hasRoyalties) where.has_royalty = { _eq: true };
 
       let order_by = {
         newest: { created_at: "desc" },
@@ -89,7 +90,7 @@
   class="container mx-auto flex flex-wrap flex-col-reverse md:flex-row sm:justify-between mt-10 md:mt-20"
 >
   <h2 class="md:mb-0">Market</h2>
-  {#if $user && $user.is_artist}
+  {#if $session.user && $session.user.is_artist}
     <a href="/a/create" class="primary-btn" data-cy="new-artwork"
       >Submit a new artwork</a
     >
@@ -102,14 +103,12 @@
 </div>
 <div class="container mx-auto">
   <div
-    class="flex flex-wrap justify-between items-center md:flex-row-reverse controls"
+    class="flex flex-wrap justify-between items-center flex-row-reverse controls py-10"
   >
-    <div
-      class="w-full lg:w-auto mb-3 flex filter-container justify-between pt-10 xl:py-10 xl:pb-30 mt-50"
-    >
+    <div class="w-full flex filter-container justify-between">
       <div class="switch">
         <div
-          class="flex cursor-pointer lg:hidden mb-8 font-bold"
+          class="flex cursor-pointer font-bold"
           on:click={() => (showFilters = !showFilters)}
         >
           <div>FILTERS</div>

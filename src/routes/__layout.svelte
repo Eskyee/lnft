@@ -1,6 +1,7 @@
 <script context="module">
   import { prerendering } from "$app/env";
   import { get } from "$lib/api";
+  import "../main.css";
 
   export async function load({ fetch, url, session }) {
     if (prerendering)
@@ -8,6 +9,7 @@
         props: {
           addresses: [],
           titles: [],
+          popup: null,
         },
       };
 
@@ -39,25 +41,39 @@
     addresses as a,
     meta,
     titles as t,
-    user,
+    popup as p,
     password,
+    prompt,
     poll,
+    user,
     token,
   } from "$lib/store";
   import { onDestroy, onMount } from "svelte";
   import branding from "$lib/branding";
+  import { checkAuthFromLocalStorage } from "$lib/auth";
 
-  export let addresses, titles;
+  export let addresses, titles, popup;
+  let unsubscribeFromSession;
+  let refreshInterval;
+  let authCheckInterval;
 
-  let interval;
   let refresh = async () => {
     try {
       let { jwt_token } = await get("/auth/refresh.json", fetch);
       $token = jwt_token;
-      if (!$token && $session) delete $session.user;
     } catch (e) {
       console.log(e);
     }
+  };
+
+  let authCheck = async () => {
+    try {
+      if ($session.user) {
+        checkAuthFromLocalStorage($session.user);
+      }
+    } catch (e) {
+      console.log(e);
+    } 
   };
 
   if (browser) {
@@ -70,24 +86,35 @@
 
     $a = addresses;
     $t = titles;
+    $p = popup;
+    $user = $session.user;
+    $token = $session.jwt;
 
-    if ($session) {
-      $user = $session.user;
-      $token = $session.jwt;
-    }
+    refreshInterval = setInterval(refresh, 60000);
+    authCheckInterval = setInterval(authCheck, 5000);
 
-    interval = setInterval(refresh, 60000);
+    unsubscribeFromSession = session.subscribe(value => {
+      value.user && checkAuthFromLocalStorage(value.user);
+    })
   }
 
   let open = false;
   let y;
 
-  let stopPolling = () => $poll.map(clearInterval);
+  let stopPolling = () => {
+    $poll.map(clearInterval);
+    $prompt = false;
+  };
   $: stopPolling($page);
 
-  onDestroy(() => clearInterval(interval));
+  onDestroy(() => {
+    clearInterval(refreshInterval);
+    clearInterval(authCheckInterval);
+    unsubscribeFromSession && unsubscribeFromSession();
+  });
   onMount(() => {
-    if (browser && !$password) $password = window.sessionStorage.getItem("password");
+    if (browser && !$password)
+      $password = window.sessionStorage.getItem("password");
   });
 </script>
 
@@ -113,5 +140,18 @@
 
 <Footer />
 
-<style global src="../main.css">
+<style global>
+  input,
+  textarea,
+  select {
+    @apply border bg-white focus:outline-none;
+    overflow-y: auto;
+    padding: 0;
+    padding: 10px;
+  }
+
+  .title {
+    @apply font-bold pb-14 text-4xl text-left;
+    color: #133e7c;
+  }
 </style>

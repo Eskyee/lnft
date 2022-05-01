@@ -1,15 +1,15 @@
 <script>
   import { Sidebar, Navbar, Dialog, Footer, Snack, Head } from "$comp";
   import { onMount } from "svelte";
+  import branding from "$lib/branding";
 
   let open = false;
   let y;
-
 </script>
 
 <svelte:window bind:scrollY={y} />
 
-<Head />
+<Head metadata={branding.meta} />
 <Snack />
 
 <Sidebar bind:open />

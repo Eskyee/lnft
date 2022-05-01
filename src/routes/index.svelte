@@ -13,7 +13,6 @@
   import { query } from "$lib/api";
   import { Summary } from "$comp";
   import { fade } from "svelte/transition";
-  import { user } from "$lib/store";
   import { Activity, RecentActivityCard, LatestPiecesCard } from "$comp";
   import { err } from "$lib/utils";
   import branding from "$lib/branding";
@@ -60,14 +59,26 @@
         <h2>{artwork.artist.username}</h2>
         <p>
           {artwork.title}
-          <a href="/a/{artwork.slug}">
-            <button
-              class="button-transparent header-button border mt-10"
-              style="border-color: white; color: white"
+
+          {#if new Date() < new Date("2022-04-15")}
+            <a href="/tag/bitcoinbond">
+              <button
+                class="button-transparent header-button border mt-10"
+                style="border-color: white; color: white"
+              >
+                Visit The Bitcoin Bond Gallery</button
+              ></a
             >
-              View Artwork</button
-            ></a
-          >
+          {:else}
+            <a href="/a/{artwork.slug}">
+              <button
+                class="button-transparent header-button border mt-10"
+                style="border-color: white; color: white"
+              >
+                View Artwork</button
+              ></a
+            >
+          {/if}
         </p>
       </div>
     </div>
@@ -81,7 +92,9 @@
         muted
         playsinline
         loop
-        src={`/api/public/${artwork.filename}.${artwork.filetype.split("/")[1]}`}
+        src={`/api/public/${artwork.filename}.${
+          artwork.filetype.split("/")[1]
+        }`}
         :key={featured[current].id}
       />
     {:else}
@@ -90,7 +103,9 @@
         out:fade
         class="lazy cover absolute secondary-header"
         alt={artwork.title}
-        src={`/api/public/${artwork.filename}.${artwork.filetype.split("/")[1]}`}
+        src={`/api/public/${artwork.filename}.${
+          artwork.filetype.split("/")[1]
+        }`}
       />
     {/if}
   </div>
@@ -179,7 +194,6 @@
   }
 
   .header-button {
-    width: 200px;
     border: 1px solid;
     border-radius: 30px;
     padding: 0.7rem 1.5rem !important;

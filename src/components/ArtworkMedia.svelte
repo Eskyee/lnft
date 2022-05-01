@@ -1,7 +1,11 @@
 <script>
   import { onMount } from "svelte";
   import Fa from "svelte-fa";
-  import { faVolumeUp, faVolumeMute } from "@fortawesome/free-solid-svg-icons";
+  import {
+    faVolumeUp,
+    faVolumeMute,
+    faHeadphones,
+  } from "@fortawesome/free-solid-svg-icons";
   import { loaded } from "$lib/store";
 
   export let artwork;
@@ -9,8 +13,10 @@
   export let thumb = true;
   export let preview = false;
   export let popup = false;
+  export let classes = "";
+  export let noAudio = false;
 
-  let img, vid;
+  let img, vid, aud;
   $: path =
     artwork &&
     (thumb
@@ -19,8 +25,8 @@
 
   $: cover = !showDetails;
   $: contain = showDetails;
-  $: setLoaded(img, vid);
-  let setLoaded = (img, vid) => {
+  $: setLoaded(img, vid, aud);
+  let setLoaded = (img, vid, aud) => {
     img &&
       (img.onload = () => {
         $loaded[artwork.id] = true;
@@ -29,6 +35,12 @@
 
     vid &&
       (vid.onloadeddata = () => {
+        $loaded[artwork.id] = true;
+        $loaded = $loaded;
+      });
+
+    aud &&
+      (aud.onerror = () => {
         $loaded[artwork.id] = true;
         $loaded = $loaded;
       });
@@ -103,7 +115,7 @@
     on:blur={out}
   >
     <video
-      class="lazy"
+      class={`lazy ${classes}`}
       autoplay
       muted
       playsinline
@@ -125,9 +137,27 @@
       </button>
     {/if}
   </div>
+{:else if artwork.filetype && artwork.filetype.includes("audio")}
+  <div
+    class="p-5 bg-primary/50 flex justify-center items-center h-full w-full mx-auto rounded-lg"
+  >
+    <img src class="hidden" bind:this={aud} />
+    <figure>
+      <Fa icon={faHeadphones} class="mx-auto" size="3x" />
+      <figcaption class="text-center">NFT audio file</figcaption>
+
+      {#if noAudio === false}
+        <audio class="mx-auto" controls src={preview || path}>
+          Your browser does not support the
+          <code>audio</code> element.
+        </audio>
+      {/if}
+    </figure>
+  </div>
 {:else}
   <div class="w-full" class:cover class:contain>
     <img
+      class={`${classes}`}
       src={preview || path ? path : "/liquid_logo.svg"}
       alt={artwork.title}
       bind:this={img}

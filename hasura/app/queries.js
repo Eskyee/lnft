@@ -45,6 +45,11 @@ module.exports = {
       id
     }
   }`,
+  updateArtwork: `mutation ($artwork: artworks_set_input!, $id: uuid!) {
+    update_artworks_by_pk(pk_columns: { id: $id }, , _set: $artwork) {
+      id
+    }
+  }`,
   updateViews: `mutation ($id: uuid!) {
     update_artworks_by_pk(pk_columns: { id: $id }, _inc: { views: 1 }) {
       id
@@ -53,6 +58,11 @@ module.exports = {
         multisig
       }
       asset
+    }
+  }`,
+  deleteTransaction: `mutation delete_transaction($id: uuid!) {
+    delete_transactions_by_pk(id: $id) {
+      id
     }
   }`,
   setHeld: `mutation ($id: uuid!, $held: String!) {
@@ -174,8 +184,8 @@ module.exports = {
   }`,
   cancelListing: `mutation ($id: uuid!, $artwork_id: uuid!) {
     update_artworks_by_pk(
-      pk_columns: { id: $artwork_id }, 
-      _set: { 
+      pk_columns: { id: $artwork_id },
+      _set: {
         list_price: null,
         list_price_tx: null
       }
@@ -183,8 +193,8 @@ module.exports = {
      id
     }
     update_transactions_by_pk(
-      pk_columns: { id: $id }, 
-      _set: { 
+      pk_columns: { id: $id },
+      _set: {
         type: "cancelled_listing"
       }
     ) {
@@ -202,21 +212,21 @@ module.exports = {
       hash
       bid {
         id
-      } 
+      }
     }
   }`,
   setTransactionTime: `mutation($id: uuid!, $created_at: timestamptz!) {
     update_transactions_by_pk(
-      pk_columns: { id: $id }, 
+      pk_columns: { id: $id },
       _set: { created_at: $created_at }
     ) {
       id
     }
   }`,
-  getLastTransaction: `query($artwork_id: uuid!) { 
+  getLastTransaction: `query($artwork_id: uuid!) {
     transactions(
       where: { artwork_id: { _eq: $artwork_id }, confirmed: { _eq: true }},
-      order_by: { created_at: desc }, 
+      order_by: { created_at: desc },
       limit: 1
     ) {
       created_at
@@ -237,15 +247,15 @@ module.exports = {
       ]
     }) {
       contract
-    } 
+    }
   }`,
   getLastTransactionsForAddress: `query($address: String!) {
     transactions(
       where: {
-        address: {_eq: $address}, 
+        address: {_eq: $address},
         type: {_in: ["deposit", "withdrawal"]}
       },
-      limit: 25,
+      limit: 50,
       order_by: [{ sequence: desc }]
     ) {
       hash
@@ -258,10 +268,10 @@ module.exports = {
   getTransactions: `query($id: uuid!, $limit: Int) {
     transactions(
       where: {
-        user_id: {_eq: $id}, 
+        user_id: {_eq: $id},
         type: {_in: ["deposit", "withdrawal"]}
       },
-      order_by: {sequence: desc}, 
+      order_by: {sequence: desc},
       limit: $limit
     ) {
       id
@@ -280,8 +290,8 @@ module.exports = {
   }`,
   setConfirmed: `mutation setConfirmed($id: uuid!) {
     update_transactions_by_pk(
-      pk_columns: { id: $id }, 
-      _set: { 
+      pk_columns: { id: $id },
+      _set: {
         confirmed: true
       }
     ) {
@@ -300,11 +310,11 @@ module.exports = {
       }
       user {
         username
-      } 
+      }
       bid {
         id
         user_id
-      } 
+      }
     }
   }`,
   getArtworkWithBidTransactionByHash: `query getArtworkWithBidTransactionByHash($id: uuid!, $hash: String!) {
@@ -352,6 +362,28 @@ module.exports = {
       vout
       asset
       value
+    }
+  }`,
+  createArtwork: `mutation ($artwork: artworks_insert_input!, $tags: [tags_insert_input!]!, $transaction: transactions_insert_input!) {
+    insert_artworks_one(object: $artwork) {
+      id
+    }
+    insert_tags(objects: $tags) {
+      affected_rows
+    }
+    insert_transactions_one(object: $transaction) {
+      id
+    }
+  }`,
+  createComment: `mutation ($comment: comments_insert_input!) {
+    insert_comments_one(object: $comment) {
+      id
+    }
+  }`,
+  getArtwork: `query($id: uuid!) {
+    artworks_by_pk(id: $id) {
+      id
+      owner_id
     }
   }`,
 };

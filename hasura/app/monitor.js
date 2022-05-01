@@ -2,8 +2,9 @@ const { api, ipfs, q, electrs, registry } = require("./api");
 const { formatISO, compareAsc, parseISO, subMinutes } = require("date-fns");
 const reverse = require("buffer-reverse");
 const fs = require("fs");
-const { networks, Psbt } = require("liquidjs-lib");
+const { Psbt } = require("liquidjs-lib");
 const sleep = (n) => new Promise((r) => setTimeout(r, n));
+const { btc, network } = require("./wallet");
 
 const {
   cancelBid,
@@ -28,11 +29,6 @@ const {
   updateUser,
 } = require("./queries");
 
-const network = process.env.LIQUID_ELECTRS_URL.includes("blockstream")
-  ? networks.liquid
-  : networks.regtest;
-
-const btc = network.assetHash;
 const txcache = {};
 const hexcache = {};
 
@@ -45,7 +41,6 @@ const updateAvatars = async () => {
         let f = files.find((f) => f.startsWith(user.avatar_url));
         if (f && f !== user.avatar_url) {
           user.avatar_url = f;
-          console.log("updating user", user.avatar_url);
 
           q(updateUser, { user, id: user.id }).catch(console.log);
         }
@@ -196,7 +191,7 @@ app.post("/asset/register", async (req, res) => {
   fs.writeFileSync("/export/proofs.json", JSON.stringify(proofs));
 
   try {
-    let { transactions } = await q(getContract, asset);
+    let { transactions } = await q(getContract, { asset });
     let { contract } = transactions[0];
 
     r = await registry
@@ -264,11 +259,12 @@ let getTxns = async (address, latest) => {
 
   let txns = [...curr];
 
-  while (curr.length === 25 && !curr.find((tx) => latest.includes(tx.txid))) {
+  while (curr.length >= 25 && !curr.find((tx) => latest.includes(tx.txid))) {
     curr = await electrs
       .url(`/address/${address}/txs/chain/${curr[24].txid}`)
       .get()
       .json();
+
     txns.push(...curr);
   }
 
@@ -285,6 +281,7 @@ let updateTransactions = async (address, user_id) => {
       transactions.map((tx) => tx.hash)
     )
   ).reverse();
+
   if (txns.length)
     console.log(`updating ${txns.length} transactions for ${address}`);
 
@@ -327,10 +324,12 @@ let updateTransactions = async (address, user_id) => {
       let type = total[asset] < 0 ? "withdrawal" : "deposit";
 
       if (
-        total[asset] === 0 ||
         transactions.find(
           (tx) =>
-            tx.user_id === user_id && tx.hash === txid && tx.asset === asset && tx.type === type
+            tx.user_id === user_id &&
+            tx.hash === txid &&
+            tx.asset === asset &&
+            tx.type === type
         )
       )
         continue;
@@ -356,13 +355,11 @@ let updateTransactions = async (address, user_id) => {
         } = await q(createTransaction, { transaction });
         transactions.push(transaction);
       } catch (e) {
-        console.log(e);
+        // console.log(e);
         continue;
       }
     }
   }
-
-  if (txns.length) console.log("done");
 
   return txns;
 };
@@ -371,11 +368,6 @@ let scanUtxos = async (address) => {
   let { users } = await q(getUserByAddress, { address });
   if (!users.length) return [];
   let { id } = users[0];
-
-  await updateTransactions(address, id);
-
-  let { transactions } = await q(getTransactions, { id });
-
   let { utxos } = await q(getUtxos, { address });
 
   let outs = utxos.map(
@@ -398,47 +390,60 @@ let scanUtxos = async (address) => {
     })
   );
 
-  transactions = transactions.filter(
-    (tx) => !outs.length || tx.sequence > outs[0].sequence
-  );
+  await updateTransactions(address, id);
+
+  let uniq = (a, k) => [...new Map(a.map((x) => [k(x), x])).values()];
+  let { transactions } = await q(getTransactions, { id });
+  transactions = uniq(
+    transactions.sort((a, b) => a.sequence - b.sequence),
+    (tx) => tx.hash + tx.asset
+  ).filter((tx) => !outs.length || tx.sequence > outs[0].sequence);
 
   transactions.map(async ({ id, hash, asset: txAsset, json, confirmed }) => {
-    if (!json) json = await electrs.url(`/tx/${hash}`).get().json();
-    else json = JSON.parse(json);
+    try {
+      if (!json) json = await electrs.url(`/tx/${hash}`).get().json();
+      else json = JSON.parse(json);
 
-    json.vout.map(
-      ({ value, asset, scriptpubkey_address }, vout) =>
-        scriptpubkey_address === address &&
-        asset === txAsset &&
-        !outs.find(
-          (o) => hash === o.txid && vout === o.vout && o.asset === asset
-        ) &&
-        outs.push({
-          transaction_id: id,
-          txid: hash,
-          vout,
-          value,
-          asset,
-          confirmed,
-        })
-    );
+      json.vout.map(
+        ({ value, asset, scriptpubkey_address }, vout) =>
+          scriptpubkey_address === address &&
+          asset === txAsset &&
+          !outs.find(
+            (o) => hash === o.txid && vout === o.vout && o.asset === asset
+          ) &&
+          outs.push({
+            transaction_id: id,
+            txid: hash,
+            vout,
+            value,
+            asset,
+            confirmed,
+          })
+      );
+    } catch (e) {
+      console.log(e);
+    }
   });
 
   transactions.map(async ({ hash, json }) => {
-    if (!json) json = await electrs.url(`/tx/${hash}`).get().json();
-    else json = JSON.parse(json);
+    try {
+      if (!json) json = await electrs.url(`/tx/${hash}`).get().json();
+      else json = JSON.parse(json);
 
-    json.vin.map(({ txid, vout }) => {
-      let spent = [];
+      json.vin.map(({ txid, vout }) => {
+        let spent = [];
 
-      outs = outs.filter((o) =>
-        o.txid === txid && o.vout === vout ? spent.push(o) && false : true
-      );
+        outs = outs.filter((o) =>
+          o.txid === txid && o.vout === vout ? spent.push(o) && false : true
+        );
 
-      spent.map(
-        ({ id }) => id && q(deleteUtxo, { id }).then().catch(console.log)
-      );
-    });
+        spent.map(
+          ({ id }) => id && q(deleteUtxo, { id }).then().catch(console.log)
+        );
+      });
+    } catch (e) {
+      console.log(e);
+    }
   });
 
   let unseen = outs.filter(
